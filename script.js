@@ -1,65 +1,71 @@
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+const NUMBERS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const LETTERS = [...Array(26)].map((_, i) => String.fromCharCode(i + 65));
+const SYMBOLS = ['*', '#', '?', '^', '$', '%', '&', '{', '}', '[', ']', '~'];
 
+const lengthRange = document.getElementById('length');
+const lengthValueSpan = document.getElementById('lengthValue');
+const passwordInput = document.getElementById('password');
+const clipBoardButton = document.getElementById('clipboard');
+const clipboardAlert = document.getElementById('alert');
 
-let ageSamples = [];
-let genderSamples = [];
+const footerElement = document.querySelector('footer');
+footerElement.innerHTML = `<p>Copyright &copy; ${new Date().getFullYear()}</p>`;
 
-const MAX_SAMPLES = 10; 
+let state = {
+  numbers: true,
+  lowercase: true,
+  uppercase: true,
+  symbols: true,
+  passwordLength: 20,
+};
 
-
-Promise.all([
-    faceapi.nets.tinyFaceDetector.loadFromUri("models"), 
-    faceapi.nets.ageGenderNet.loadFromUri("models")
-]).then(startVideo);
-
-function startVideo() {
-    navigator.mediaDevices.getUserMedia({ video: {} })
-        .then(stream => {
-            video.srcObject = stream;
-        })
-        .catch(err => console.error("Error accessing webcam:", err));
-}
-
-video.addEventListener("play", () => {
-    canvas.width = video.width;
-    canvas.height = video.height;
-
-    setInterval(async () => {
-        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-            .withAgeAndGender();
-
-        if (detections.length > 0) { 
-            const largestFace = detections.reduce((max, face) => 
-                (face.detection.box.area > max.detection.box.area ? face : max), detections[0]);
-
-            
-            if (ageSamples.length >= MAX_SAMPLES) ageSamples.shift(); 
-            if (genderSamples.length >= MAX_SAMPLES) genderSamples.shift();
-
-            ageSamples.push(largestFace.age);
-            genderSamples.push(largestFace.gender);
-
-            
-            const avgAge = Math.round(ageSamples.reduce((sum, age) => sum + age, 0) / ageSamples.length);
-            const genderCounts = genderSamples.reduce((acc, g) => ((acc[g] = (acc[g] || 0) + 1), acc), {});
-            const mostFrequentGender = Object.keys(genderCounts).reduce((a, b) => (genderCounts[a] > genderCounts[b] ? a : b));
-
-            
-            const resizedDetections = faceapi.resizeResults([largestFace], { width: video.width, height: video.height });
-
-           
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            
-            faceapi.draw.drawDetections(canvas, resizedDetections);
-
-           
-            new faceapi.draw.DrawTextField(
-                [`Age: ${avgAge}`, `Gender: ${mostFrequentGender}`],
-                largestFace.detection.box.bottomRight
-            ).draw(canvas);
-        }
-    }, 200); 
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof generatePassword !== 'undefined') {
+    generatePassword();
+  }
 });
+
+const copyToClipboard = async () => {
+  if (navigator.clipboard) {
+    await navigator.clipboard.writeText(passwordInput.value);
+    clipboardAlert.classList.add('active');
+    clipBoardButton.setAttribute('disabled', true);
+
+    setTimeout(() => {
+      clipboardAlert.classList.remove('active');
+      clipBoardButton.removeAttribute('disabled');
+    }, 4000);
+  }
+};
+clipBoardButton.addEventListener('click', copyToClipboard);
+
+const allCheckBoxes = [...document.querySelectorAll('input[type="checkbox"]')];
+allCheckBoxes.forEach((input) => {
+  input.addEventListener('change', (e) => {
+    state = { ...state, [e.target.id]: e.target.checked };
+    generatePassword();
+  });
+});
+
+lengthRange.addEventListener('input', (e) => {
+  lengthValueSpan.innerText = e.target.value;
+  state = { ...state, passwordLength: e.target.value };
+  generatePassword();
+});
+
+const generatePassword = () => {
+  let finalPassword = '';
+  const availableCharacters = [
+    ...(state.numbers ? NUMBERS : []),
+    ...(state.uppercase ? LETTERS : []),
+    ...(state.lowercase ? LETTERS.map((letter) => letter.toLowerCase()) : []),
+    ...(state.symbols ? SYMBOLS : []),
+  ];
+
+  for (let i = 0; i < state.passwordLength; i++) {
+    const randomIndex = Math.floor(Math.random() * availableCharacters.length);
+    finalPassword += availableCharacters[randomIndex];
+  }
+
+  passwordInput.value = finalPassword;
+};
